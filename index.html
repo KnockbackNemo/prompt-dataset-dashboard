@@ -94,11 +94,11 @@
                     <td class="p-4 text-sm text-gray-600">{{ item.prompt }}</td>
                     <td class="p-4">
                         <span class="text-sm font-bold" :class="getRateColor(item.acceptRate)">{{ item.acceptRate.toFixed(1) }}%</span>
-                        <div class="text-xs text-gray-400">{{ item.accept_count }} / {{ item.total_tested }}</div>
+                        <div class="text-xs text-gray-400">{{ item.accept_count }} / {{ item.accept_count + item.refusal_count }}</div>
                     </td>
                     <td class="p-4">
                         <span class="text-sm font-medium" :class="(item.total_tested - (item.accept_count + item.refusal_count)) > 0 ? 'text-red-600 font-bold' : 'text-gray-500'">
-                            {{ item.total_tested - (item.accept_count + item.refusal_count) }}
+                            {{ item.total_tested - (item.accept_count + item.refusal_count) }} / {{ item.total_tested }}
                         </span>
                     </td>
                     <td class="p-4">
@@ -126,14 +126,14 @@
                     <span>Overall Aggregate</span>
                     <span>Accepts: {{ selectedItem.accept_count }}</span>
                     <span>Refusals: {{ selectedItem.refusal_count }}</span>
-                    <span>Errors: {{ selectedItem.total_tested - (selectedItem.accept_count + selectedItem.refusal_count) }}</span>
+                    <span>Errors: {{ selectedItem.total_tested - (selectedItem.accept_count + selectedItem.refusal_count) }} / {{ selectedItem.total_tested }}</span>
                 </div>
                 <div class="bg-gray-50 flex flex-col py-2">
                     <div v-for="sub in selectedItem.subItems" :key="sub.model" class="px-6 py-1 text-xs text-gray-700 flex gap-6 items-center">
                         <span class="w-48 font-bold">{{ sub.model }}</span>
                         <span class="w-24 text-green-700 font-semibold">Accepts: {{ sub.accept_count }}</span>
                         <span class="w-24 text-red-700 font-semibold">Refusals: {{ sub.refusal_count }}</span>
-                        <span class="w-24 text-gray-500">Errors: {{ sub.total_tested - (sub.accept_count + sub.refusal_count) }}</span>
+                        <span class="w-32 text-gray-500">Errors: {{ sub.total_tested - (sub.accept_count + sub.refusal_count) }} / {{ sub.total_tested }}</span>
                     </div>
                 </div>
             </div>
@@ -141,7 +141,7 @@
                 <span>Model: {{ selectedItem.model }}</span>
                 <span>Accepts: {{ selectedItem.accept_count || 0 }}</span>
                 <span>Refusals: {{ selectedItem.refusal_count || 0 }}</span>
-                <span>Errors: {{ selectedItem.total_tested - (selectedItem.accept_count + selectedItem.refusal_count) }}</span>
+                <span>Errors: {{ selectedItem.total_tested - (selectedItem.accept_count + selectedItem.refusal_count) }} / {{ selectedItem.total_tested }}</span>
             </div>
 
             <div class="p-6 overflow-y-auto flex-1">
@@ -193,7 +193,9 @@
                 const flat = [];
                 for (const [model, prompts] of Object.entries(this.rawData)) {
                     for (const [prompt, stats] of Object.entries(prompts)) {
-                        const acceptRate = stats.total_tested > 0 ? (stats.accept_count / stats.total_tested) * 100 : 0;
+                        // Exclude API errors from acceptRate math calculation
+                        const valid_responses = stats.accept_count + stats.refusal_count;
+                        const acceptRate = valid_responses > 0 ? (stats.accept_count / valid_responses) * 100 : 0;
                         
                         const mapped_responses = (stats.raw_responses || []).map(r => ({
                             model: model,
@@ -240,7 +242,9 @@
                     });
 
                     return Object.values(grouped).map(group => {
-                        group.acceptRate = group.total_tested > 0 ? (group.accept_count / group.total_tested) * 100 : 0;
+                        // Exclude API errors from acceptRate math calculation in Aggregated Mode
+                        const valid_responses = group.accept_count + group.refusal_count;
+                        group.acceptRate = valid_responses > 0 ? (group.accept_count / valid_responses) * 100 : 0;
                         return group;
                     }).filter(group => {
                         return group.acceptRate >= this.minAccept && group.acceptRate <= this.maxAccept;
@@ -256,9 +260,7 @@
             },
             viewDetails(item) { this.selectedItem = item; },
 
-            // --- ADDED EXPORT METHODS ---
             getFilteredPromptList() {
-                // Extracts exactly the prompts currently matching your filters and ensures there are no duplicates
                 const uniquePrompts = [...new Set(this.filteredPrompts.map(item => item.prompt))];
                 return JSON.stringify(uniquePrompts, null, 2);
             },
@@ -283,7 +285,6 @@
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
             },
-            // ----------------------------
 
             renderCharts() {
                 const promptMap = {};
